@@ -78,8 +78,12 @@ defmodule Astarte.Pairing.FDO.OwnerOnboarding do
   end
 
   defp fetch_owner_private_key(realm_name, device_id) do
-    with {:ok, pem_key} <- Queries.get_owner_private_key(realm_name, device_id) do
-      COSE.Keys.from_pem(pem_key)
+    case Queries.get_owner_private_key(realm_name, device_id) do
+      pem when is_binary(pem) ->
+        COSE.Keys.from_pem(pem)
+
+      _ ->
+        nil
     end
   end
 
