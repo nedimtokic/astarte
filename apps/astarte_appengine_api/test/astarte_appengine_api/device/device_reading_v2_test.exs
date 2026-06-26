@@ -22,8 +22,13 @@ defmodule Astarte.AppEngine.API.Device.DeviceReadingV2Test do
 
   import Astarte.Helpers.Device
 
+  alias Astarte.Core.Device, as: CoreDevice
+  alias Astarte.Core.InterfaceDescriptor
+
   alias Astarte.DataAccess.Realms.Realm
   alias Astarte.DataAccess.Repo
+  alias Astarte.DataAccess.Device, as: DeviceQueries
+  alias Astarte.DataAccess.Interface, as: InterfaceQueries
 
   alias Astarte.AppEngine.API.Device
   alias Astarte.AppEngine.API.Device.InterfaceValues
@@ -117,24 +122,24 @@ defmodule Astarte.AppEngine.API.Device.DeviceReadingV2Test do
       check all interface_to_update <- member_of(encrypted_server_interfaces),
                 mapping_update <-
                   InterfaceUpdateGenerator.valid_mapping_update_for(interface_to_update) do
-        Device.update_interface_values(
-          realm_name,
-          device.encoded_id,
-          interface_to_update.name,
-          mapping_update.path,
-          "test_value",
-          %{}
-        )
+        if mapping_update.value_type != %{} do
+          %{
+            interface_to_update: interface_to_update,
+            expected_read_value: expected_read_value,
+            mapping_update: mapping_update
+          } = populate_interface(realm_name, device, interface_to_update, mapping_update)
 
-        {:ok, %InterfaceValues{data: result}} =
-          Device.get_interface_values!(
-            realm_name,
-            device.encoded_id,
-            interface_to_update.name,
-            %{}
-          )
+          {:ok, %InterfaceValues{data: result}} =
+            Device.get_interface_values!(
+              realm_name,
+              device.encoded_id,
+              interface_to_update.name,
+              mapping_update.path,
+              %{limit: 1}
+            )
 
-        assert valid_result?(result, interface_to_update, "test_value")
+          assert valid_result?(result, interface_to_update, expected_read_value)
+        end
       end
     end
   end
@@ -242,15 +247,35 @@ defmodule Astarte.AppEngine.API.Device.DeviceReadingV2Test do
       assert {:ok, %{"v" => ^expected_published_value}} = Cyanide.decode(payload)
     end)
 
-    {:ok, _} =
-      Device.update_interface_values(
-        realm_name,
-        device.encoded_id,
-        interface_to_update.name,
-        mapping_update.path,
-        update_value,
-        []
-      )
+    with {:ok, device_id} <- CoreDevice.decode_device_id(device.encoded_id),
+         {:ok, major_version} <-
+           DeviceQueries.interface_version(realm_name, device_id, interface_to_update.name),
+         {:ok, interface_row} <-
+           InterfaceQueries.retrieve_interface_row(
+             realm_name,
+             interface_to_update.name,
+             major_version
+           ),
+         {:ok, interface_descriptor} <- InterfaceDescriptor.from_db_result(interface_row),
+         path <- "/" <> mapping_update.path do
+      if interface_descriptor.aggregation == :individual do
+        Device.update_individual_interface_values(
+          realm_name,
+          device_id,
+          interface_descriptor,
+          path,
+          update_value
+        )
+      else
+        Device.update_object_interface_values(
+          realm_name,
+          device_id,
+          interface_descriptor,
+          path,
+          update_value
+        )
+      end
+    end
 
     %{
       interface_to_update: interface_to_update,

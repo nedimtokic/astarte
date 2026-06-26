@@ -56,7 +56,8 @@ defmodule Astarte.Cases.Device do
 
     endpoints_to_update =
       for interface <- interfaces_with_encrypted_endpoints,
-          mapping <- interface.mappings do
+          mapping <- interface.mappings,
+          Map.get(mapping, :encrypted) do
         {interface.interface_id, mapping.endpoint_id}
       end
 
@@ -251,38 +252,40 @@ defmodule Astarte.Cases.Device do
   end
 
   defp encrypted_endpoint_mapping(:properties, :individual) do
-    mapping_gen =
-      MappingGenerator.mapping(
-        interface_type: :properties,
-        endpoint: "/encryptedProperty",
-        value_type: :string,
-        encrypted: true
-      )
-
     InterfaceGenerator.interface(
       name: "test.EncryptedPropertiesInterface",
       ownership: :device,
       type: :properties,
-      mappings: StreamData.fixed_list([mapping_gen])
+      aggregation: :individual
     )
+    |> map(fn interface ->
+      mapping = Enum.at(interface.mappings, 0)
+
+      mapping = %{
+        mapping
+        | endpoint: "/encryptedProperty",
+          value_type: :string,
+          encrypted: true,
+          allow_unset: true
+      }
+
+      %{interface | mappings: [mapping]}
+    end)
   end
 
   defp encrypted_endpoint_mapping(:datastream, :individual) do
-    mapping_gen =
-      MappingGenerator.mapping(
-        interface_type: :datastream,
-        endpoint: "/encryptedValue",
-        value_type: :string,
-        encrypted: true
-      )
-
     InterfaceGenerator.interface(
       name: "test.EncryptedIndividualDatastreamInterface",
       ownership: :device,
       type: :datastream,
-      aggregation: :individual,
-      mappings: StreamData.fixed_list([mapping_gen])
+      aggregation: :individual
     )
+    |> map(fn interface ->
+      mapping = Enum.at(interface.mappings, 0)
+      mapping = %{mapping | endpoint: "/encryptedValue", value_type: :string, encrypted: true}
+
+      %{interface | mappings: [mapping]}
+    end)
   end
 
   defp encrypted_endpoint_mapping(:datastream, :object) do
@@ -302,8 +305,20 @@ defmodule Astarte.Cases.Device do
     mappings =
       StreamData.fixed_list([mapping_gen, mapping_gen])
       |> map(fn [mapping_0, mapping_1] ->
-        mapping_0 = %{mapping_0 | endpoint: "/encryptedPath/endpoint0", encrypted: true}
-        mapping_1 = %{mapping_1 | endpoint: "/encryptedPath/endpoint1", encrypted: true}
+        mapping_0 = %{
+          mapping_0
+          | endpoint: "/encryptedPath/endpoint0",
+            value_type: :string,
+            encrypted: true
+        }
+
+        mapping_1 = %{
+          mapping_1
+          | endpoint: "/encryptedPath/endpoint1",
+            value_type: :string,
+            encrypted: true
+        }
+
         [mapping_0, mapping_1]
       end)
 

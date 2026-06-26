@@ -73,7 +73,7 @@ defmodule Astarte.AppEngine.API.Device.Queries do
       from Endpoint,
         prefix: ^keyspace,
         where: [interface_id: ^interface_id],
-        select: [:value_type, :endpoint_id]
+        select: [:value_type, :endpoint_id, :encrypted]
 
     query =
       case opts[:limit] do
@@ -91,7 +91,7 @@ defmodule Astarte.AppEngine.API.Device.Queries do
       from Endpoint,
         prefix: ^keyspace,
         where: [interface_id: ^interface_id],
-        select: [:value_type, :endpoint]
+        select: [:value_type, :endpoint, :encrypted]
 
     Repo.all(query, consistency: Consistency.domain_model(:read))
   end
@@ -582,7 +582,7 @@ defmodule Astarte.AppEngine.API.Device.Queries do
       query
       |> select(^columns)
       |> Repo.all(consistency: consistency)
-      |> maybe_decrypt_values(endpoint_row, realm_name)
+      |> maybe_decrypt_values(mapping, realm_name)
 
     count =
       query
@@ -594,7 +594,7 @@ defmodule Astarte.AppEngine.API.Device.Queries do
 
   def value_type_query(realm_name, interface_id, endpoint_id) do
     keyspace = Realm.keyspace_name(realm_name)
-    query = from Endpoint, select: [:value_type]
+    query = from Endpoint, select: [:value_type, :encrypted]
 
     opts = [prefix: keyspace, consistency: Consistency.domain_model(:read)]
 
